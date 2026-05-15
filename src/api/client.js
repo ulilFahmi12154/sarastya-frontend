@@ -18,6 +18,38 @@ export function getStoredToken() {
   return localStorage.getItem(TOKEN_STORAGE_KEY);
 }
 
+function formatValidationField(field) {
+  return field.replace(/^\$\./, "").replace(/^\$/, "body");
+}
+
+function readValidationErrorMessage(payload) {
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+
+  const validationSources = [payload.data, payload.errors];
+
+  for (const source of validationSources) {
+    if (!source || typeof source !== "object") {
+      continue;
+    }
+
+    for (const [field, value] of Object.entries(source)) {
+      const message = Array.isArray(value)
+        ? value.find((item) => typeof item === "string" && item.trim())
+        : typeof value === "string"
+          ? value
+          : "";
+
+      if (message) {
+        return `${formatValidationField(field)}: ${message}`;
+      }
+    }
+  }
+
+  return "";
+}
+
 function readErrorMessage(status, payload, fallbackMessage) {
   if (status === 401) {
     return fallbackMessage || SESSION_EXPIRED_MESSAGE;
@@ -29,6 +61,14 @@ function readErrorMessage(status, payload, fallbackMessage) {
 
   if (status >= 500) {
     return "Terjadi kesalahan pada server. Coba lagi beberapa saat lagi.";
+  }
+
+  if (status === 400 || status === 422) {
+    const validationMessage = readValidationErrorMessage(payload);
+
+    if (validationMessage) {
+      return validationMessage;
+    }
   }
 
   if (payload && typeof payload === "object" && typeof payload.message === "string") {

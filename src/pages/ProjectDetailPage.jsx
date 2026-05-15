@@ -8,6 +8,11 @@ import { createTask, deleteTask, getTasks, updateTask } from "../api/tasksApi";
 import { formatDate, toInputDate, toIsoDate } from "../utils/date";
 
 const STATUS_OPTIONS = ["Todo", "Doing", "Done"];
+const STATUS_VALUE_BY_LABEL = {
+  Todo: 0,
+  Doing: 1,
+  Done: 2,
+};
 
 const initialTaskForm = {
   title: "",
@@ -41,13 +46,38 @@ function getTaskProjectId(task) {
   return task.projectId ?? task.ProjectId ?? task.project?.id ?? task.projectID;
 }
 
+function toTaskStatusValue(status) {
+  if (typeof status === "number" && STATUS_OPTIONS[status]) {
+    return status;
+  }
+
+  const numericStatus = Number(status);
+
+  if (Number.isInteger(numericStatus) && STATUS_OPTIONS[numericStatus]) {
+    return numericStatus;
+  }
+
+  return STATUS_VALUE_BY_LABEL[status] ?? STATUS_VALUE_BY_LABEL.Todo;
+}
+
+function normalizeTaskStatus(status) {
+  return STATUS_OPTIONS[toTaskStatusValue(status)] || "Todo";
+}
+
+function normalizeTask(task) {
+  return {
+    ...task,
+    status: normalizeTaskStatus(task.status),
+  };
+}
+
 function buildTaskPayload(task, fallbackProjectId, statusOverride) {
   return {
     projectId: getTaskProjectId(task) || fallbackProjectId,
     title: task.title,
     content: task.content || "",
-    status: statusOverride || task.status || "Todo",
-    priority: Number(task.priority || 1),
+    status: toTaskStatusValue(statusOverride ?? task.status),
+    priority: Number(task.priority ?? 1),
     dueDate: task.dueDate || null,
   };
 }
@@ -88,7 +118,7 @@ export default function ProjectDetailPage() {
           : allTasks.filter((task) => String(getTaskProjectId(task)) === String(id));
 
       setProject(projectPayload);
-      setTasks(filteredTasks);
+      setTasks(filteredTasks.map(normalizeTask));
     } catch (requestError) {
       setAlert({
         type: "error",
@@ -121,7 +151,7 @@ export default function ProjectDetailPage() {
       projectId: id,
       title: form.title.trim(),
       content: form.content.trim(),
-      status: form.status,
+      status: toTaskStatusValue(form.status),
       priority: Number(form.priority || 1),
       dueDate: form.dueDate ? toIsoDate(form.dueDate) : null,
     };
