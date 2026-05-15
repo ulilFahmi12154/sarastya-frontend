@@ -6,6 +6,7 @@ export const API_BASE_URL = import.meta.env.DEV ? "" : CONFIGURED_API_BASE_URL;
 
 export const TOKEN_STORAGE_KEY = "taskflow_token";
 export const USER_STORAGE_KEY = "taskflow_user";
+const SESSION_EXPIRED_MESSAGE = "Sesi kamu sudah berakhir. Silakan login kembali.";
 
 let unauthorizedHandler = null;
 
@@ -17,9 +18,9 @@ export function getStoredToken() {
   return localStorage.getItem(TOKEN_STORAGE_KEY);
 }
 
-function readErrorMessage(status, payload) {
+function readErrorMessage(status, payload, fallbackMessage) {
   if (status === 401) {
-    return "Sesi kamu sudah berakhir. Silakan login kembali.";
+    return fallbackMessage || SESSION_EXPIRED_MESSAGE;
   }
 
   if (status === 404) {
@@ -56,7 +57,15 @@ async function parseResponse(response) {
 }
 
 export async function apiRequest(endpoint, options = {}) {
-  const { method = "GET", body, headers = {}, token } = options;
+  const {
+    method = "GET",
+    body,
+    headers = {},
+    token,
+    includeAuth = true,
+    skipUnauthorizedHandling = false,
+    unauthorizedMessage,
+  } = options;
   const requestHeaders = {
     Accept: "application/json",
     ...headers,
@@ -66,7 +75,7 @@ export async function apiRequest(endpoint, options = {}) {
     requestHeaders["Content-Type"] = "application/json";
   }
 
-  const activeToken = token ?? getStoredToken();
+  const activeToken = includeAuth ? token ?? getStoredToken() : null;
 
   if (activeToken) {
     requestHeaders.Authorization = `Bearer ${activeToken}`;
@@ -100,14 +109,16 @@ export async function apiRequest(endpoint, options = {}) {
   }
 
   if (response.status === 401) {
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
-    localStorage.removeItem(USER_STORAGE_KEY);
+    if (!skipUnauthorizedHandling) {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem(USER_STORAGE_KEY);
 
-    if (unauthorizedHandler) {
-      unauthorizedHandler();
+      if (unauthorizedHandler) {
+        unauthorizedHandler();
+      }
     }
 
-    throw new Error(readErrorMessage(response.status, payload));
+    throw new Error(readErrorMessage(response.status, payload, unauthorizedMessage));
   }
 
   if (!response.ok || (payload && typeof payload === "object" && payload.success === false)) {

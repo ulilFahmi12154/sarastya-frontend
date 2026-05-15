@@ -13,6 +13,10 @@ function validateLogin(form) {
     return "Email wajib diisi.";
   }
 
+  if (!form.password) {
+    return "Password wajib diisi.";
+  }
+
   if (form.password.length < 8) {
     return "Password minimal 8 karakter.";
   }
