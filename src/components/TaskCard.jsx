@@ -2,7 +2,7 @@ import { formatDate } from "../utils/date";
 
 const STATUS_OPTIONS = ["Todo", "Doing", "Done"];
 
-export default function TaskCard({ task, onStatusChange, onDelete, isUpdating = false }) {
+export default function TaskCard({ task, onEdit, onStatusChange, onDelete, isUpdating = false }) {
   return (
     <article className="card task-card">
       <div className="task-topline">
@@ -41,6 +41,9 @@ export default function TaskCard({ task, onStatusChange, onDelete, isUpdating = 
             ))}
           </select>
         </label>
+        <button className="button button-secondary" type="button" onClick={() => onEdit(task)}>
+          Edit
+        </button>
         <button className="button button-danger" type="button" onClick={() => onDelete(task)}>
           Delete
         </button>

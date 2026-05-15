@@ -87,10 +87,16 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [form, setForm] = useState(initialTaskForm);
+  const [editingTask, setEditingTask] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [updatingTaskId, setUpdatingTaskId] = useState(null);
   const [alert, setAlert] = useState({ type: "", message: "" });
+
+  const editingTaskId = useMemo(
+    () => (editingTask ? getTaskId(editingTask) : null),
+    [editingTask]
+  );
 
   const taskStats = useMemo(
     () =>
@@ -138,7 +144,24 @@ export default function ProjectDetailPage() {
     setForm((current) => ({ ...current, [name]: value }));
   }
 
-  async function handleCreateTask(event) {
+  function resetForm() {
+    setEditingTask(null);
+    setForm(initialTaskForm);
+  }
+
+  function startEditTask(task) {
+    setEditingTask(task);
+    setForm({
+      title: task.title || "",
+      content: task.content || "",
+      status: normalizeTaskStatus(task.status),
+      priority: task.priority ?? 1,
+      dueDate: toInputDate(task.dueDate),
+    });
+    setAlert({ type: "info", message: `Mengedit task "${task.title}".` });
+  }
+
+  async function handleSubmitTask(event) {
     event.preventDefault();
     setAlert({ type: "", message: "" });
 
@@ -147,26 +170,39 @@ export default function ProjectDetailPage() {
       return;
     }
 
+    const priority = Number(form.priority || 0);
+
+    if (!Number.isFinite(priority) || priority < 0) {
+      setAlert({ type: "error", message: "Prioritas wajib berupa angka minimal 0." });
+      return;
+    }
+
     const payload = {
       projectId: id,
       title: form.title.trim(),
       content: form.content.trim(),
       status: toTaskStatusValue(form.status),
-      priority: Number(form.priority || 1),
+      priority,
       dueDate: form.dueDate ? toIsoDate(form.dueDate) : null,
     };
 
     setIsSubmitting(true);
 
     try {
-      await createTask(payload);
-      setForm(initialTaskForm);
-      setAlert({ type: "success", message: "Task berhasil dibuat." });
+      if (editingTaskId) {
+        await updateTask(editingTaskId, payload);
+        setAlert({ type: "success", message: "Task berhasil diperbarui." });
+      } else {
+        await createTask(payload);
+        setAlert({ type: "success", message: "Task berhasil dibuat." });
+      }
+
+      resetForm();
       await loadProjectData();
     } catch (requestError) {
       setAlert({
         type: "error",
-        message: requestError.message || "Task belum dapat dibuat.",
+        message: requestError.message || "Task belum dapat disimpan.",
       });
     } finally {
       setIsSubmitting(false);
@@ -186,6 +222,9 @@ export default function ProjectDetailPage() {
 
     try {
       await updateTask(taskId, buildTaskPayload(task, id, nextStatus));
+      if (editingTaskId === taskId) {
+        setForm((current) => ({ ...current, status: nextStatus }));
+      }
       setAlert({ type: "success", message: "Status task berhasil diperbarui." });
     } catch (requestError) {
       setTasks(previousTasks);
@@ -210,6 +249,9 @@ export default function ProjectDetailPage() {
     try {
       await deleteTask(taskId);
       setTasks((current) => current.filter((item) => getTaskId(item) !== taskId));
+      if (editingTaskId === taskId) {
+        resetForm();
+      }
       setAlert({ type: "success", message: "Task berhasil dihapus." });
     } catch (requestError) {
       setAlert({
@@ -264,8 +306,8 @@ export default function ProjectDetailPage() {
 
       <section className="content-grid">
         <aside className="form-panel">
-          <h2>Create task</h2>
-          <form className="form-stack" onSubmit={handleCreateTask}>
+          <h2>{editingTask ? "Edit task" : "Create task"}</h2>
+          <form className="form-stack" onSubmit={handleSubmitTask}>
             <label className="field">
               <span>Judul task</span>
               <input
@@ -305,7 +347,7 @@ export default function ProjectDetailPage() {
                 <input
                   name="priority"
                   type="number"
-                  min="1"
+                  min="0"
                   max="5"
                   value={form.priority}
                   onChange={updateField}
@@ -323,9 +365,16 @@ export default function ProjectDetailPage() {
               />
             </label>
 
-            <button className="button button-primary" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Menyimpan..." : "Create Task"}
-            </button>
+            <div className="form-actions">
+              <button className="button button-primary" type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Menyimpan..." : editingTask ? "Update Task" : "Create Task"}
+              </button>
+              {editingTask && (
+                <button className="button button-secondary" type="button" onClick={resetForm}>
+                  Batal
+                </button>
+              )}
+            </div>
           </form>
         </aside>
 
@@ -355,6 +404,7 @@ export default function ProjectDetailPage() {
                 <TaskCard
                   key={getTaskId(task)}
                   task={task}
+                  onEdit={startEditTask}
                   onStatusChange={handleStatusChange}
                   onDelete={handleDeleteTask}
                   isUpdating={updatingTaskId === getTaskId(task)}
